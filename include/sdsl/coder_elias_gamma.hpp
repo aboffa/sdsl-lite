@@ -124,6 +124,17 @@ class elias_gamma
         static uint64_t decode_prefix_sum(const uint64_t* d, const size_type start_idx, size_type n);
         static uint64_t decode_prefix_sum(const uint64_t* d, const size_type start_idx, const size_type end_idx, size_type n);
 
+
+        //! Decode at most n Elias gamma encoded integers beginning at start_idx in the bitstring "data" until the sum gets bigger than val and return the number of elements decoded.
+        /*! \param data Pointer to the beginning of the Elias gamma encoded bitstring.
+            \param start_idx Index of the first bit to endcode the values from.
+            \param n Number of values to decode from the bitstring.
+            \param sample Initial sample
+            \param val The result is the smaller value bigger than the value val
+         */
+        template<typename T>
+        static size_t decode_until_succ(const uint64_t *d, const size_type start_idx, size_type n, const uint64_t sample, const T val);
+
         template<class int_vector>
         static bool encode(const int_vector& v, int_vector& z);
         template<class int_vector>
@@ -248,6 +259,35 @@ inline uint64_t elias_gamma::decode(const uint64_t* d, const size_type start_idx
     }
     return value;
 }
+
+    template<typename T>
+    size_t
+    elias_gamma::decode_until_succ(const uint64_t *d, const size_type start_idx, size_type n, const uint64_t sample,
+                                   const T val) {
+        size_type i = 0;
+        size_t to_return = 0;
+        uint64_t value = sample;
+        d += (start_idx >> 6);
+        uint8_t offset = start_idx & 0x3F;
+        while (i++ < n) {
+            if (value >= val)
+                return to_return;
+            to_return++;
+            uint16_t len_1 = bits::read_unary_and_move(d, offset); // read length of x-1
+            auto gap = 0;
+            if (!len_1) {
+                gap = 1;
+            } else {
+                gap = bits::read_int_and_move(d, offset, len_1) + (len_1 < 64) * (1ULL << len_1);
+            }
+            value += gap;
+        }
+        if (value >= val)
+            return to_return;
+        return ++to_return;
+    }
+
+
 
 } // end namespace coder
 } // end namespace sdsl

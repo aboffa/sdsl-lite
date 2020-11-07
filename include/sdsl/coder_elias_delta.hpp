@@ -23,6 +23,21 @@
 
 #include "int_vector.hpp"
 
+template<class ForwardIterator, class T>
+size_t even_lower_bound(ForwardIterator first, ForwardIterator last, const T &val) {
+    ForwardIterator base = first;
+    size_t n = distance(first, last);
+    while (n > 2) {
+        size_t half = n / 2;
+        half &= ~(1UL << 0);
+        base = (base[half] < val) ? base + half : base;
+        n -= half;
+    }
+    auto to_return = (*base < val) + base - first;
+    to_return &= ~(1UL << 0);
+    return to_return;
+}
+
 namespace sdsl
 {
 
@@ -127,6 +142,17 @@ class elias_delta
          */
         static uint64_t decode_prefix_sum(const uint64_t* d, const size_type start_idx, size_type n);
         static uint64_t decode_prefix_sum(const uint64_t* d, const size_type start_idx, const size_type end_idx, size_type n);
+
+        //! Decode at most n Elias delta encoded integers beginning at start_idx in the bitstring "data" until the sum gets bigger than val and return the number of elements decoded.
+        /*! \param data Pointer to the beginning of the Elias delta encoded bitstring.
+            \param start_idx Index of the first bit to endcode the values from.
+            \param n Number of values to decode from the bitstring.
+            \param sample Initial sample
+            \param val The result is the smaller value bigger than the value val
+         */
+        template<typename T>
+        static size_t decode_until_succ(const uint64_t *d, const size_type start_idx, size_type n, const uint64_t sample, const T val);
+
 
         template<class int_vector>
         static bool encode(const int_vector& v, int_vector& z);
@@ -251,6 +277,35 @@ inline uint64_t elias_delta::decode(const uint64_t* d, const size_type start_idx
     }
     return value;
 }
+
+    template<typename T>
+    size_t
+    elias_delta::decode_until_succ(const uint64_t *d, const size_type start_idx, size_type n, const uint64_t sample,
+                                   const T val) {
+        size_type i = 0;
+        size_t to_return = 0;
+        uint64_t value = sample;
+        d += (start_idx >> 6);
+        uint8_t offset = start_idx & 0x3F;
+        size_type len_1_len, len;
+        while (i++ < n) {
+            if (value >= val)
+                return to_return;
+            to_return++;
+            len_1_len = bits::read_unary_and_move(d, offset);
+            auto gap = 0;
+            if (!len_1_len) {
+                gap = 1;
+            } else {
+                len = bits::read_int_and_move(d, offset, len_1_len) + (1ULL << len_1_len);
+                gap += bits::read_int_and_move(d, offset, len - 1) + (len - 1 < 64) * (1ULL << (len - 1));
+            }
+            value += gap;
+        }
+        if (value >= val)
+            return to_return;
+        return ++to_return;
+    }
 
 } // end namespace coder
 } // end namespace sdsl

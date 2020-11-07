@@ -30,6 +30,21 @@
 namespace sdsl
 {
 
+    template<class ForwardIterator, class T>
+    size_t even_lower_bound(ForwardIterator first, ForwardIterator last, const T &val) {
+        ForwardIterator base = first;
+        size_t n = distance(first, last);
+        while (n > 2) {
+            size_t half = n / 2;
+            half &= ~(1UL << 0);
+            base = (base[half] < val) ? base + half : base;
+            n -= half;
+        }
+        auto to_return = (*base < val) + base - first;
+        to_return &= ~(1UL << 0);
+        return to_return;
+    }
+
 template<uint8_t t_width>
 struct enc_vector_trait {
     typedef int_vector<0> int_vector_type;
@@ -184,6 +199,25 @@ class enc_vector
                 t_coder::template decode<true, true>(m_z.data(), m_sample_vals_and_pointer[(i<<1)+1], size()-i*t_dens - 1, it);
             }
         };
+
+        inline double bits_per_key() const {
+            return sdsl::size_in_bytes(*this) * 8. / this->size();
+        }
+
+        inline value_type select(size_type i) const { return this->operator[](i); }
+
+        inline size_type rank(value_type x) const {
+            // check in which block to search. (successor block)
+            size_type index_sample = even_lower_bound(this->m_sample_vals_and_pointer.begin(),
+                                                   this->m_sample_vals_and_pointer.end() - 2, x);
+            return ((index_sample / 2) * this->get_sample_dens()) +
+                    t_coder::coder::decode_until_succ(this->m_z.data(),
+                                               this->m_sample_vals_and_pointer[index_sample + 1],
+                                               this->get_sample_dens() - 1,
+                                               this->m_sample_vals_and_pointer[index_sample],
+                                               x);
+        }
+
 };
 
 template<class t_coder, uint32_t t_dens, uint8_t t_width>
